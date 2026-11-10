@@ -1,3 +1,3 @@
-[submodule "third-party/Adafruit_INA228"]
-	path = third-party/Adafruit_INA228
+[submodule "thirdParty/Adafruit_INA228"]
+	path = thirdParty/Adafruit_INA228
 	url = https://github.com/adafruit/Adafruit_INA228
