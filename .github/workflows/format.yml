@@ -1,0 +1,40 @@
+name: Format
+
+on:
+  pull_request:
+    paths:
+      - '**.c'
+      - '**.cpp'
+      - '**.h'
+      - '**.hpp'
+      - '.clang-format'
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same branch/PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Space-separated directories to check. Each is searched recursively.
+  FORMAT_DIRS: >-
+    App
+    Modules
+    Drivers
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+      - name: Check formatting
+        run: |
+          dirs=""
+          for d in $FORMAT_DIRS; do [ -d "$d" ] && dirs="$dirs $d"; done
+          if [ -z "$dirs" ]; then echo "No source directories yet"; exit 0; fi
+          find $dirs -type f \( -name '*.c' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
+            -print0 | xargs -0 --no-run-if-empty clang-format --dry-run --Werror

@@ -53,6 +53,14 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
 )
 
+# Treat warnings as errors in the application target (not the HAL, which is a
+# separate STM32_Drivers library). Enabled in CI with -DWARNINGS_AS_ERRORS=ON.
+option(WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
+    $<$<COMPILE_LANGUAGE:C,CXX>:-Wall -Wextra>
+    $<$<AND:$<BOOL:${WARNINGS_AS_ERRORS}>,$<COMPILE_LANGUAGE:C,CXX>>:-Werror>
+)
+
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
