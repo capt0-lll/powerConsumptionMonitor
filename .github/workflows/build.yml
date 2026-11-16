@@ -1,0 +1,75 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same branch/PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECT: powerConsumptionMonitor
+  # STM32F302x8: 64 KB flash, 16 KB RAM. Fail the job above these limits (bytes).
+  FLASH_LIMIT: 65536
+  RAM_LIMIT: 16384
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi ninja-build cmake
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DWARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Convert to .bin and .hex
+        run: |
+          out=build/${{ matrix.preset }}
+          arm-none-eabi-objcopy -O binary "$out/$PROJECT.elf" "$out/$PROJECT.bin"
+          arm-none-eabi-objcopy -O ihex   "$out/$PROJECT.elf" "$out/$PROJECT.hex"
+
+      - name: Firmware size report
+        run: |
+          out=build/${{ matrix.preset }}
+          arm-none-eabi-size "$out/$PROJECT.elf" | tee size.txt
+          read -r text data bss _ < <(tail -n 1 size.txt)
+          flash=$((text + data))
+          ram=$((data + bss))
+          {
+            echo "### Firmware size (${{ matrix.preset }})"
+            echo
+            echo "| Region | Used | Limit | Usage |"
+            echo "|--------|------|-------|-------|"
+            echo "| Flash | $flash B | $FLASH_LIMIT B | $((flash * 100 / FLASH_LIMIT))% |"
+            echo "| RAM (static) | $ram B | $RAM_LIMIT B | $((ram * 100 / RAM_LIMIT))% |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$flash" -gt "$FLASH_LIMIT" ]; then echo "::error::Flash usage $flash exceeds $FLASH_LIMIT"; exit 1; fi
+          if [ "$ram" -gt "$RAM_LIMIT" ]; then echo "::error::RAM usage $ram exceeds $RAM_LIMIT"; exit 1; fi
+
+      - name: Upload firmware
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: firmware-${{ matrix.preset }}
+          if-no-files-found: ignore
+          path: |
+            build/${{ matrix.preset }}/${{ env.PROJECT }}.elf
+            build/${{ matrix.preset }}/${{ env.PROJECT }}.bin
+            build/${{ matrix.preset }}/${{ env.PROJECT }}.hex
+            build/${{ matrix.preset }}/${{ env.PROJECT }}.map
